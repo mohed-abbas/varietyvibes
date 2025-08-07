@@ -1,0 +1,120 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserRole() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    function hasRole(roles) {
+      return isAuthenticated() && getUserRole() in roles;
+    }
+    
+    function isActiveUser() {
+      return isAuthenticated() && 
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.active == true;
+    }
+
+    // Public assets (read-only for everyone)
+    match /public/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Media uploads - organized by type
+    match /media/{fileName} {
+      // Anyone can read media files
+      allow read: if true;
+      
+      // Authenticated users can upload media
+      allow create: if isActiveUser() && 
+        // File size limit: 10MB
+        request.resource.size < 10 * 1024 * 1024 &&
+        // Allowed file types
+        request.resource.contentType.matches('image/(jpeg|png|gif|webp|svg\\+xml)') ||
+        request.resource.contentType.matches('video/(mp4|webm|ogg)') ||
+        request.resource.contentType.matches('audio/(mp3|wav|ogg)') ||
+        request.resource.contentType == 'application/pdf';
+      
+      // Users can delete their own uploads, admins can delete any
+      allow delete: if isActiveUser() && 
+        (hasRole(['admin', 'editor']) || 
+         resource.metadata.uploadedBy == request.auth.uid);
+      
+      // Only allow updates to metadata
+      allow update: if isActiveUser() && 
+        (hasRole(['admin', 'editor']) || 
+         resource.metadata.uploadedBy == request.auth.uid) &&
+        request.resource.size == resource.size;
+    }
+
+    // User avatars
+    match /avatars/{userId}/{fileName} {
+      // Anyone can read avatar images
+      allow read: if true;
+      
+      // Users can upload their own avatars, admins can upload any
+      allow create, update: if isActiveUser() && 
+        (request.auth.uid == userId || hasRole(['admin'])) &&
+        // File size limit: 2MB for avatars
+        request.resource.size < 2 * 1024 * 1024 &&
+        // Only image files allowed for avatars
+        request.resource.contentType.matches('image/(jpeg|png|gif|webp)');
+      
+      // Users can delete their own avatars, admins can delete any
+      allow delete: if isActiveUser() && 
+        (request.auth.uid == userId || hasRole(['admin']));
+    }
+
+    // Category images
+    match /categories/{categoryId}/{fileName} {
+      // Anyone can read category images
+      allow read: if true;
+      
+      // Only admins and editors can manage category images
+      allow create, update, delete: if isActiveUser() && hasRole(['admin', 'editor']) &&
+        // File size limit: 5MB
+        request.resource.size < 5 * 1024 * 1024 &&
+        // Only image files
+        request.resource.contentType.matches('image/(jpeg|png|gif|webp|svg\\+xml)');
+    }
+
+    // Post featured images
+    match /posts/{postId}/{fileName} {
+      // Anyone can read post images
+      allow read: if true;
+      
+      // Post authors, editors, and admins can manage post images
+      allow create, update, delete: if isActiveUser() && 
+        (hasRole(['admin', 'editor']) ||
+         (hasRole(['author']) && 
+          firestore.get(/databases/(default)/documents/posts/$(postId)).data.authorId == request.auth.uid)) &&
+        // File size limit: 8MB for post images
+        request.resource.size < 8 * 1024 * 1024 &&
+        // Only image files
+        request.resource.contentType.matches('image/(jpeg|png|gif|webp|svg\\+xml)');
+    }
+
+    // Temp uploads (for processing)
+    match /temp/{userId}/{fileName} {
+      // Only the user can access their temp files
+      allow read, write: if isActiveUser() && request.auth.uid == userId;
+      
+      // Auto-delete after 24 hours (handled by Cloud Functions)
+    }
+
+    // Backups (admin only)
+    match /backups/{fileName} {
+      allow read, write: if isActiveUser() && hasRole(['admin']);
+    }
+
+    // Default deny all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,434 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { 
+  PencilIcon, 
+  TrashIcon,
+  FolderIcon,
+  EyeIcon
+} from '@heroicons/react/24/outline'
+import DataTable, { Column } from '@/components/admin/common/DataTable'
+import StatusBadge from '@/components/admin/common/StatusBadge'
+import { FirestoreCategory } from '@/types/admin'
+import { formatDate, formatRelativeTime, getContrastColor } from '@/lib/utils'
+
+export default function CategoryList() {
+  const [categories, setCategories] = useState<FirestoreCategory[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchCategories()
+  }, [])
+
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch('/api/admin/categories')
+      if (response.ok) {
+        const data = await response.json()
+        setCategories(data.categories || [])
+      } else {
+        // Mock data for now
+        setCategories([
+          {
+            id: 'tech',
+            slug: 'technology',
+            name: 'Technology',
+            description: 'Articles about web development, programming, and tech trends',
+            color: '#3b82f6',
+            icon: 'code',
+            featuredImage: '/images/categories/tech.jpg',
+            featured: true,
+            active: true,
+            sortOrder: 1,
+            seo: {
+              title: 'Technology Articles - Variety Vibes',
+              description: 'Latest articles on web development, programming, and technology trends',
+              keywords: ['technology', 'programming', 'web development', 'coding']
+            },
+            hero: {
+              title: 'Technology & Development',
+              subtitle: 'Stay updated with the latest in tech and development',
+              backgroundImage: '/images/categories/tech-hero.jpg'
+            },
+            createdAt: new Date('2024-01-01'),
+            updatedAt: new Date('2024-01-20'),
+            createdBy: 'user1',
+            postCount: 12,
+            totalViews: 8547
+          },
+          {
+            id: 'lifestyle',
+            slug: 'lifestyle',
+            name: 'Lifestyle',
+            description: 'Tips and insights for a better life, health, and wellness',
+            color: '#10b981',
+            icon: 'heart',
+            featured: true,
+            active: true,
+            sortOrder: 2,
+            seo: {
+              title: 'Lifestyle - Variety Vibes',
+              description: 'Tips and insights for better living, health, and wellness',
+              keywords: ['lifestyle', 'health', 'wellness', 'living']
+            },
+            hero: {
+              title: 'Lifestyle & Wellness',
+              subtitle: 'Discover tips for a healthier, happier life'
+            },
+            createdAt: new Date('2024-01-01'),
+            updatedAt: new Date('2024-01-15'),
+            createdBy: 'user1',
+            postCount: 8,
+            totalViews: 5234
+          },
+          {
+            id: 'business',
+            slug: 'business',
+            name: 'Business',
+            description: 'Entrepreneurship, startups, and business insights',
+            color: '#f59e0b',
+            icon: 'briefcase',
+            featured: false,
+            active: true,
+            sortOrder: 3,
+            seo: {
+              title: 'Business - Variety Vibes',
+              description: 'Entrepreneurship insights, startup tips, and business strategies',
+              keywords: ['business', 'entrepreneurship', 'startups', 'strategy']
+            },
+            hero: {
+              title: 'Business & Entrepreneurship',
+              subtitle: 'Insights for growing your business and career'
+            },
+            createdAt: new Date('2024-01-05'),
+            updatedAt: new Date('2024-01-10'),
+            createdBy: 'user2',
+            postCount: 5,
+            totalViews: 3156
+          },
+          {
+            id: 'travel',
+            slug: 'travel',
+            name: 'Travel',
+            description: 'Travel guides, tips, and destination insights',
+            color: '#8b5cf6',
+            icon: 'globe',
+            featured: false,
+            active: false,
+            sortOrder: 4,
+            seo: {
+              title: 'Travel - Variety Vibes',
+              description: 'Travel guides, destination tips, and adventure insights',
+              keywords: ['travel', 'destinations', 'guides', 'adventure']
+            },
+            hero: {
+              title: 'Travel & Adventure',
+              subtitle: 'Explore the world with our travel guides and tips'
+            },
+            createdAt: new Date('2024-01-08'),
+            updatedAt: new Date('2024-01-08'),
+            createdBy: 'user1',
+            postCount: 3,
+            totalViews: 1847
+          }
+        ])
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error)
+      setCategories([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    const category = categories.find(c => c.id === categoryId)
+    if (!category) return
+
+    if (category.postCount > 0) {
+      alert(`Cannot delete category "${category.name}" because it has ${category.postCount} posts. Please move the posts to another category first.`)
+      return
+    }
+
+    if (!confirm(`Are you sure you want to delete the category "${category.name}"?`)) return
+
+    try {
+      const response = await fetch(`/api/admin/categories/${categoryId}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        setCategories(categories.filter(cat => cat.id !== categoryId))
+      }
+    } catch (error) {
+      console.error('Error deleting category:', error)
+    }
+  }
+
+  const handleToggleCategoryStatus = async (categoryId: string) => {
+    const category = categories.find(c => c.id === categoryId)
+    if (!category) return
+
+    try {
+      const response = await fetch(`/api/admin/categories/${categoryId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !category.active })
+      })
+
+      if (response.ok) {
+        setCategories(categories.map(c => 
+          c.id === categoryId 
+            ? { ...c, active: !c.active }
+            : c
+        ))
+      }
+    } catch (error) {
+      console.error('Error updating category status:', error)
+    }
+  }
+
+  const columns: Column<FirestoreCategory>[] = [
+    {
+      key: 'name',
+      title: 'Category',
+      render: (_, category) => (
+        <div className="flex items-center">
+          <div className="flex-shrink-0 h-10 w-10">
+            {category.featuredImage ? (
+              <img
+                className="h-10 w-10 rounded-lg object-cover"
+                src={category.featuredImage}
+                alt={category.name}
+              />
+            ) : (
+              <div 
+                className="h-10 w-10 rounded-lg flex items-center justify-center"
+                style={{ backgroundColor: category.color }}
+              >
+                <FolderIcon 
+                  className="h-5 w-5" 
+                  style={{ color: getContrastColor(category.color) }}
+                />
+              </div>
+            )}
+          </div>
+          <div className="ml-4">
+            <div className="flex items-center">
+              <div className="text-sm font-medium text-gray-900">
+                {category.name}
+              </div>
+              {category.featured && (
+                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                  Featured
+                </span>
+              )}
+            </div>
+            <div className="text-sm text-gray-500 line-clamp-1">
+              {category.description}
+            </div>
+            <div className="flex items-center mt-1 space-x-2">
+              <div 
+                className="w-3 h-3 rounded-full"
+                style={{ backgroundColor: category.color }}
+              />
+              <span className="text-xs text-gray-400">/{category.slug}</span>
+            </div>
+          </div>
+        </div>
+      ),
+      sortable: true,
+      width: '40%'
+    },
+    {
+      key: 'active',
+      title: 'Status',
+      render: (active) => (
+        <StatusBadge variant={active ? 'success' : 'neutral'}>
+          {active ? 'Active' : 'Inactive'}
+        </StatusBadge>
+      ),
+      sortable: true,
+      width: '10%'
+    },
+    {
+      key: 'postCount',
+      title: 'Posts',
+      render: (postCount) => (
+        <span className="text-sm text-gray-900">
+          {postCount}
+        </span>
+      ),
+      sortable: true,
+      width: '8%'
+    },
+    {
+      key: 'totalViews',
+      title: 'Views',
+      render: (totalViews) => (
+        <span className="text-sm text-gray-900">
+          {totalViews?.toLocaleString() || '0'}
+        </span>
+      ),
+      sortable: true,
+      width: '10%'
+    },
+    {
+      key: 'sortOrder',
+      title: 'Order',
+      render: (sortOrder) => (
+        <span className="text-sm text-gray-900">
+          {sortOrder}
+        </span>
+      ),
+      sortable: true,
+      width: '8%'
+    },
+    {
+      key: 'updatedAt',
+      title: 'Last Updated',
+      render: (updatedAt) => (
+        <div>
+          <div className="text-sm text-gray-900">
+            {formatDate(updatedAt)}
+          </div>
+          <div className="text-xs text-gray-500">
+            {formatRelativeTime(updatedAt)}
+          </div>
+        </div>
+      ),
+      sortable: true,
+      width: '15%'
+    },
+    {
+      key: 'actions',
+      title: 'Actions',
+      render: (_, category) => (
+        <div className="flex space-x-2">
+          <button
+            onClick={() => {/* Navigate to edit category */}}
+            className="text-blue-600 hover:text-blue-900"
+            title="Edit category"
+          >
+            <PencilIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => window.open(`/category/${category.slug}`, '_blank')}
+            className="text-green-600 hover:text-green-900"
+            title="View category page"
+          >
+            <EyeIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => handleToggleCategoryStatus(category.id)}
+            className={category.active ? "text-yellow-600 hover:text-yellow-900" : "text-green-600 hover:text-green-900"}
+            title={category.active ? "Deactivate category" : "Activate category"}
+          >
+            {category.active ? '⏸️' : '▶️'}
+          </button>
+          <button
+            onClick={() => handleDeleteCategory(category.id)}
+            className="text-red-600 hover:text-red-900"
+            title="Delete category"
+            disabled={category.postCount > 0}
+          >
+            <TrashIcon className={`h-4 w-4 ${category.postCount > 0 ? 'opacity-50' : ''}`} />
+          </button>
+        </div>
+      ),
+      width: '9%'
+    }
+  ]
+
+  return (
+    <div className="space-y-6">
+      {/* Category stats */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+        <div className="bg-white overflow-hidden shadow-sm rounded-lg">
+          <div className="p-5">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <FolderIcon className="h-6 w-6 text-gray-400" />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Total Categories</dt>
+                  <dd className="text-lg font-medium text-gray-900">{categories.length}</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white overflow-hidden shadow-sm rounded-lg">
+          <div className="p-5">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="h-6 w-6 bg-yellow-400 rounded flex items-center justify-center">
+                  <span className="text-white text-xs">★</span>
+                </div>
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Featured</dt>
+                  <dd className="text-lg font-medium text-gray-900">
+                    {categories.filter(c => c.featured).length}
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white overflow-hidden shadow-sm rounded-lg">
+          <div className="p-5">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="h-6 w-6 bg-green-400 rounded flex items-center justify-center">
+                  <span className="text-white text-xs">✓</span>
+                </div>
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Active</dt>
+                  <dd className="text-lg font-medium text-gray-900">
+                    {categories.filter(c => c.active).length}
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white overflow-hidden shadow-sm rounded-lg">
+          <div className="p-5">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="h-6 w-6 bg-blue-400 rounded flex items-center justify-center">
+                  <span className="text-white text-xs">#</span>
+                </div>
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Total Posts</dt>
+                  <dd className="text-lg font-medium text-gray-900">
+                    {categories.reduce((sum, c) => sum + c.postCount, 0)}
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Categories table */}
+      <DataTable
+        data={categories}
+        columns={columns}
+        loading={loading}
+        emptyMessage="No categories found. Create your first category to organize your content!"
+        emptyIcon={FolderIcon}
+      />
+    </div>
+  )
+}

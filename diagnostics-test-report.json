@@ -1,0 +1,82 @@
+{
+  "timestamp": "2025-08-07T15:09:48.935Z",
+  "summary": {
+    "total": 10,
+    "passed": 10,
+    "failed": 0,
+    "skipped": 0,
+    "passRate": 100
+  },
+  "details": [
+    {
+      "name": "Environment Variables",
+      "success": true,
+      "critical": true,
+      "message": "All 6 environment variables are valid",
+      "details": []
+    },
+    {
+      "name": "Script File Existence",
+      "success": true,
+      "critical": true,
+      "message": "Found 6/6 diagnostic scripts",
+      "details": []
+    },
+    {
+      "name": "Quick Credential Check",
+      "success": true,
+      "critical": false,
+      "message": "Quick credential check script executed successfully",
+      "details": []
+    },
+    {
+      "name": "Firebase Health Checker",
+      "success": true,
+      "critical": false,
+      "message": "Health checker executed and generated report",
+      "details": []
+    },
+    {
+      "name": "Interactive CLI",
+      "success": true,
+      "critical": false,
+      "message": "Interactive CLI script structure is valid",
+      "details": []
+    },
+    {
+      "name": "Firebase Monitor",
+      "success": true,
+      "critical": false,
+      "message": "Firebase monitor script structure is valid",
+      "details": []
+    },
+    {
+      "name": "Auto-Fixer",
+      "success": true,
+      "critical": false,
+      "message": "Auto-fixer dry run completed successfully",
+      "details": []
+    },
+    {
+      "name": "Package.json Scripts",
+      "success": true,
+      "critical": true,
+      "message": "Found 6/6 npm scripts",
+      "details": []
+    },
+    {
+      "name": "API Endpoints",
+      "success": true,
+      "critical": false,
+      "message": "Found 5/5 API endpoints",
+      "details": []
+    },
+    {
+      "name": "Output File Generation",
+      "success": true,
+      "critical": false,
+      "message": "Can create 2/2 output files",
+      "details": []
+    }
+  ]
+}

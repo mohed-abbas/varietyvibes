@@ -1,0 +1,166 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserRole() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) ?
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role : null;
+    }
+    
+    function hasRole(roles) {
+      let userRole = getUserRole();
+      return isAuthenticated() && userRole != null && userRole in roles;
+    }
+    
+    function isOwner(ownerId) {
+      return isAuthenticated() && request.auth.uid == ownerId;
+    }
+    
+    function isActiveUser() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
+    }
+    
+    function isAdminEmail() {
+      // Admin emails that can bootstrap - configure via ADMIN_EMAILS env var
+      // This is a backup check for initial bootstrap
+      let adminEmails = ['admin@example.com', 'hashim@example.com', 'your-email@example.com'];
+      return request.auth.token.email in adminEmails;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Users can read their own profile, admins can read all
+      allow read: if isAuthenticated() && 
+        (request.auth.uid == userId || hasRole(['admin']));
+      
+      // Allow user creation if:
+      // 1. Admin users can always create/update/delete
+      // 2. Bootstrap: Admin emails can create their own user documents
+      // 3. Users can create their own document if it doesn't exist (self-registration)
+      allow create: if hasRole(['admin']) || 
+        (isAuthenticated() && request.auth.uid == userId && isAdminEmail()) ||
+        (isAuthenticated() && request.auth.uid == userId && !exists(/databases/$(database)/documents/users/$(userId)));
+      
+      // Only admins and the user themselves can update their document
+      allow update: if hasRole(['admin']) || 
+        (isAuthenticated() && request.auth.uid == userId);
+      
+      // Only admins can delete user documents  
+      allow delete: if hasRole(['admin']);
+    }
+
+    // Posts collection
+    match /posts/{postId} {
+      // Public read for published posts, authenticated users can read all statuses
+      allow read: if resource.data.status == 'published' || 
+        (isAuthenticated() && hasRole(['admin', 'editor', 'author']));
+      
+      // Create: authenticated users with proper roles
+      allow create: if isActiveUser() && hasRole(['admin', 'editor', 'author']) &&
+        request.auth.uid == resource.data.authorId &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time;
+      
+      // Update: admins, editors, or post authors
+      allow update: if isActiveUser() && 
+        (hasRole(['admin', 'editor']) || 
+         (hasRole(['author']) && resource.data.authorId == request.auth.uid)) &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.lastModifiedBy == request.auth.uid;
+      
+      // Delete: only admins and editors
+      allow delete: if isActiveUser() && hasRole(['admin', 'editor']);
+    }
+
+    // Categories collection
+    match /categories/{categoryId} {
+      // Public read access
+      allow read: if true;
+      
+      // Write access: only admins and editors
+      allow create, update: if isActiveUser() && hasRole(['admin', 'editor']) &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.createdBy == request.auth.uid;
+      
+      allow delete: if isActiveUser() && hasRole(['admin', 'editor']);
+    }
+
+    // Media collection
+    match /media/{mediaId} {
+      // Public read access
+      allow read: if true;
+      
+      // Authenticated users can upload
+      allow create: if isActiveUser() && 
+        request.resource.data.uploadedBy == request.auth.uid &&
+        request.resource.data.uploadedAt == request.time;
+      
+      // Users can manage their own media, admins/editors can manage all
+      allow update, delete: if isActiveUser() && 
+        (hasRole(['admin', 'editor']) || resource.data.uploadedBy == request.auth.uid);
+    }
+
+    // Site configuration - admin only
+    match /site_config/{configId} {
+      // Public read access for site config
+      allow read: if true;
+      
+      // Only admins can modify site configuration
+      allow create, update, delete: if isActiveUser() && hasRole(['admin']) &&
+        request.resource.data.updatedBy == request.auth.uid &&
+        request.resource.data.updatedAt == request.time;
+    }
+
+    // Analytics collection - internal use only
+    match /analytics/{document=**} {
+      // Only server-side operations allowed
+      allow read, write: if false;
+    }
+
+    // Audit logs - read-only for admins
+    match /audit_logs/{logId} {
+      allow read: if isActiveUser() && hasRole(['admin']);
+      allow write: if false; // Only server-side writes allowed
+    }
+
+    // Comments (future feature)
+    match /comments/{commentId} {
+      // Public read for approved comments
+      allow read: if resource.data.status == 'approved' || 
+        (isAuthenticated() && hasRole(['admin', 'editor']));
+      
+      // Authenticated users can create comments
+      allow create: if isAuthenticated() && 
+        request.resource.data.authorId == request.auth.uid &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.status == 'pending';
+      
+      // Users can edit their own comments, moderators can edit all
+      allow update: if isActiveUser() && 
+        (hasRole(['admin', 'editor']) || resource.data.authorId == request.auth.uid);
+      
+      // Only moderators can delete comments
+      allow delete: if isActiveUser() && hasRole(['admin', 'editor']);
+    }
+
+    // Newsletter subscriptions
+    match /newsletter/{subscriptionId} {
+      // Public can subscribe
+      allow create: if request.resource.data.subscribedAt == request.time;
+      
+      // Only admins can view and manage subscriptions
+      allow read, update, delete: if isActiveUser() && hasRole(['admin']);
+    }
+
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
