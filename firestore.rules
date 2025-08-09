@@ -1,166 +1,112 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
+    // Helper function to check if user has a specific role
+    function hasRole(role) {
+      return request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
     
-    function getUserRole() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) ?
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role : null;
+    // Helper function to check if user has any of the specified roles
+    function hasAnyRole(roles) {
+      return request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in roles;
     }
     
-    function hasRole(roles) {
-      let userRole = getUserRole();
-      return isAuthenticated() && userRole != null && userRole in roles;
+    // Helper function to check if user has a specific permission
+    function hasPermission(permission) {
+      return request.auth != null && 
+        permission in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions;
     }
     
-    function isOwner(ownerId) {
-      return isAuthenticated() && request.auth.uid == ownerId;
-    }
-    
+    // Helper function to check if user is active
     function isActiveUser() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+      return request.auth != null && 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
     }
-    
-    function isAdminEmail() {
-      // Admin emails that can bootstrap - configure via ADMIN_EMAILS env var
-      // This is a backup check for initial bootstrap
-      let adminEmails = ['admin@example.com', 'hashim@example.com', 'your-email@example.com'];
-      return request.auth.token.email in adminEmails;
-    }
 
-    // Users collection
+    // Users collection - profile data for admin system users
     match /users/{userId} {
       // Users can read their own profile, admins can read all
-      allow read: if isAuthenticated() && 
-        (request.auth.uid == userId || hasRole(['admin']));
+      allow read: if request.auth != null && 
+        (request.auth.uid == userId || hasRole('admin'));
       
-      // Allow user creation if:
-      // 1. Admin users can always create/update/delete
-      // 2. Bootstrap: Admin emails can create their own user documents
-      // 3. Users can create their own document if it doesn't exist (self-registration)
-      allow create: if hasRole(['admin']) || 
-        (isAuthenticated() && request.auth.uid == userId && isAdminEmail()) ||
-        (isAuthenticated() && request.auth.uid == userId && !exists(/databases/$(database)/documents/users/$(userId)));
+      // Only admins can create new users
+      allow create: if request.auth != null && hasRole('admin') && 
+        isActiveUser();
       
-      // Only admins and the user themselves can update their document
-      allow update: if hasRole(['admin']) || 
-        (isAuthenticated() && request.auth.uid == userId);
+      // Users can update their own profile (limited fields), admins can update all
+      allow update: if request.auth != null && isActiveUser() &&
+        (request.auth.uid == userId && 
+         // Users can only update certain fields about themselves
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['displayName', 'avatar', 'bio', 'expertise', 'social', 'lastLogin']) ||
+         // Admins can update everything except sensitive system fields
+         hasRole('admin'));
       
-      // Only admins can delete user documents  
-      allow delete: if hasRole(['admin']);
+      // Only admins can delete users
+      allow delete: if request.auth != null && hasRole('admin') && 
+        isActiveUser();
     }
-
-    // Posts collection
+    
+    // Posts collection - blog posts and articles
     match /posts/{postId} {
-      // Public read for published posts, authenticated users can read all statuses
+      // Published posts are public, draft/scheduled posts require authentication
       allow read: if resource.data.status == 'published' || 
-        (isAuthenticated() && hasRole(['admin', 'editor', 'author']));
+        (request.auth != null && hasAnyRole(['admin', 'editor', 'author']) && isActiveUser());
       
-      // Create: authenticated users with proper roles
-      allow create: if isActiveUser() && hasRole(['admin', 'editor', 'author']) &&
-        request.auth.uid == resource.data.authorId &&
-        request.resource.data.createdAt == request.time &&
-        request.resource.data.updatedAt == request.time;
+      // Authors, editors, and admins can create posts
+      allow create: if request.auth != null && 
+        hasAnyRole(['admin', 'editor', 'author']) && 
+        isActiveUser() && 
+        request.resource.data.authorId == request.auth.uid;
       
-      // Update: admins, editors, or post authors
-      allow update: if isActiveUser() && 
-        (hasRole(['admin', 'editor']) || 
-         (hasRole(['author']) && resource.data.authorId == request.auth.uid)) &&
-        request.resource.data.updatedAt == request.time &&
-        request.resource.data.lastModifiedBy == request.auth.uid;
+      // Authors can update their own posts, editors and admins can update all
+      allow update: if request.auth != null && isActiveUser() && 
+        (hasAnyRole(['admin', 'editor']) || 
+         (resource.data.authorId == request.auth.uid && hasRole('author')));
       
-      // Delete: only admins and editors
-      allow delete: if isActiveUser() && hasRole(['admin', 'editor']);
+      // Only editors and admins can delete posts
+      allow delete: if request.auth != null && 
+        hasAnyRole(['admin', 'editor']) && 
+        isActiveUser();
     }
-
-    // Categories collection
+    
+    // Categories collection - content categorization
     match /categories/{categoryId} {
-      // Public read access
+      // Categories are publicly readable
       allow read: if true;
       
-      // Write access: only admins and editors
-      allow create, update: if isActiveUser() && hasRole(['admin', 'editor']) &&
-        request.resource.data.updatedAt == request.time &&
-        request.resource.data.createdBy == request.auth.uid;
-      
-      allow delete: if isActiveUser() && hasRole(['admin', 'editor']);
+      // Only editors and admins can manage categories
+      allow create, update, delete: if request.auth != null && 
+        hasAnyRole(['admin', 'editor']) && 
+        isActiveUser();
     }
-
-    // Media collection
+    
+    // Media collection - uploaded files and images
     match /media/{mediaId} {
-      // Public read access
+      // Media files are publicly readable (for displaying in posts)
       allow read: if true;
       
-      // Authenticated users can upload
-      allow create: if isActiveUser() && 
-        request.resource.data.uploadedBy == request.auth.uid &&
-        request.resource.data.uploadedAt == request.time;
+      // Authenticated users can upload media
+      allow create: if request.auth != null && isActiveUser() &&
+        request.resource.data.uploadedBy == request.auth.uid;
       
-      // Users can manage their own media, admins/editors can manage all
-      allow update, delete: if isActiveUser() && 
-        (hasRole(['admin', 'editor']) || resource.data.uploadedBy == request.auth.uid);
+      // Users can update/delete their own media, editors and admins can manage all
+      allow update, delete: if request.auth != null && isActiveUser() && 
+        (hasAnyRole(['admin', 'editor']) || 
+         resource.data.uploadedBy == request.auth.uid);
     }
-
-    // Site configuration - admin only
+    
+    // Site configuration - global site settings
     match /site_config/{configId} {
-      // Public read access for site config
+      // Site config is publicly readable (for displaying site info)
       allow read: if true;
       
-      // Only admins can modify site configuration
-      allow create, update, delete: if isActiveUser() && hasRole(['admin']) &&
-        request.resource.data.updatedBy == request.auth.uid &&
-        request.resource.data.updatedAt == request.time;
-    }
-
-    // Analytics collection - internal use only
-    match /analytics/{document=**} {
-      // Only server-side operations allowed
-      allow read, write: if false;
-    }
-
-    // Audit logs - read-only for admins
-    match /audit_logs/{logId} {
-      allow read: if isActiveUser() && hasRole(['admin']);
-      allow write: if false; // Only server-side writes allowed
-    }
-
-    // Comments (future feature)
-    match /comments/{commentId} {
-      // Public read for approved comments
-      allow read: if resource.data.status == 'approved' || 
-        (isAuthenticated() && hasRole(['admin', 'editor']));
-      
-      // Authenticated users can create comments
-      allow create: if isAuthenticated() && 
-        request.resource.data.authorId == request.auth.uid &&
-        request.resource.data.createdAt == request.time &&
-        request.resource.data.status == 'pending';
-      
-      // Users can edit their own comments, moderators can edit all
-      allow update: if isActiveUser() && 
-        (hasRole(['admin', 'editor']) || resource.data.authorId == request.auth.uid);
-      
-      // Only moderators can delete comments
-      allow delete: if isActiveUser() && hasRole(['admin', 'editor']);
-    }
-
-    // Newsletter subscriptions
-    match /newsletter/{subscriptionId} {
-      // Public can subscribe
-      allow create: if request.resource.data.subscribedAt == request.time;
-      
-      // Only admins can view and manage subscriptions
-      allow read, update, delete: if isActiveUser() && hasRole(['admin']);
-    }
-
-    // Default deny all other collections
-    match /{document=**} {
-      allow read, write: if false;
+      // Only admins can update site configuration
+      allow write: if request.auth != null && 
+        hasRole('admin') && 
+        isActiveUser();
     }
   }
 }

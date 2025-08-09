@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/hooks/useAuth'
 import Link from 'next/link'
 import { 
   PencilIcon, 
@@ -26,94 +27,38 @@ export default function PostList({ filters = {} }: PostListProps) {
   const [posts, setPosts] = useState<FirestorePost[]>([])
   const [loading, setLoading] = useState(true)
   const router = useRouter()
+  const { user } = useAuth()
 
   useEffect(() => {
-    fetchPosts()
-  }, [filters])
+    if (user) {
+      fetchPosts()
+    }
+  }, [filters, user])
 
   const fetchPosts = async () => {
+    if (!user) return
+
     try {
       const params = new URLSearchParams()
       if (filters.status) params.append('status', filters.status)
       if (filters.category) params.append('category', filters.category)
       if (filters.author) params.append('author', filters.author)
 
-      const response = await fetch(`/api/admin/posts?${params.toString()}`)
+      const token = await user.getIdToken()
+      const response = await fetch(`/api/admin/posts?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
       if (response.ok) {
         const data = await response.json()
         setPosts(data.posts || [])
       } else {
-        // Mock data for now
-        setPosts([
-          {
-            id: '1',
-            slug: 'getting-started-with-react',
-            title: 'Getting Started with React',
-            description: 'A comprehensive guide to building modern web applications with React',
-            content: '',
-            excerpt: 'Learn the fundamentals of React and start building amazing web applications...',
-            status: 'published',
-            publishDate: new Date('2024-01-15'),
-            createdAt: new Date('2024-01-10'),
-            updatedAt: new Date('2024-01-15'),
-            authorId: 'user1',
-            categoryId: 'tech',
-            featuredImage: {
-              url: '/images/react-guide.jpg',
-              alt: 'React Guide',
-              width: 1200,
-              height: 600,
-              storageRef: 'images/react-guide.jpg'
-            },
-            tags: ['react', 'javascript', 'web-development'],
-            featured: true,
-            readingTime: 8,
-            seo: {
-              metaTitle: 'Getting Started with React - Complete Guide',
-              metaDescription: 'Learn React from scratch with this comprehensive guide',
-              keywords: ['react', 'javascript', 'tutorial'],
-              ogImage: '/images/react-guide.jpg'
-            },
-            views: 1247,
-            likes: 89,
-            shares: 23,
-            moderationStatus: 'approved',
-            lastModifiedBy: 'user1'
-          },
-          {
-            id: '2',
-            slug: 'web-performance-optimization',
-            title: 'Web Performance Optimization Tips',
-            description: '10 proven techniques to make your website faster',
-            content: '',
-            excerpt: 'Discover practical tips to improve your website performance and user experience...',
-            status: 'draft',
-            createdAt: new Date('2024-01-20'),
-            updatedAt: new Date('2024-01-22'),
-            authorId: 'user2',
-            categoryId: 'tech',
-            featuredImage: {
-              url: '/images/performance.jpg',
-              alt: 'Web Performance',
-              width: 1200,
-              height: 600,
-              storageRef: 'images/performance.jpg'
-            },
-            tags: ['performance', 'optimization', 'web'],
-            featured: false,
-            readingTime: 6,
-            seo: {
-              metaTitle: 'Web Performance Optimization - 10 Essential Tips',
-              metaDescription: 'Learn how to optimize your website for better performance',
-              keywords: ['performance', 'optimization', 'speed']
-            },
-            views: 0,
-            likes: 0,
-            shares: 0,
-            moderationStatus: 'pending',
-            lastModifiedBy: 'user2'
-          }
-        ])
+        const error = await response.json()
+        console.error('Failed to fetch posts:', error.error || 'Unknown error')
+        setPosts([])
       }
     } catch (error) {
       console.error('Error fetching posts:', error)
@@ -125,17 +70,27 @@ export default function PostList({ filters = {} }: PostListProps) {
 
   const handleDeletePost = async (postId: string) => {
     if (!confirm('Are you sure you want to delete this post?')) return
+    if (!user) return
 
     try {
+      const token = await user.getIdToken()
       const response = await fetch(`/api/admin/posts/${postId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       })
 
       if (response.ok) {
         setPosts(posts.filter(post => post.id !== postId))
+      } else {
+        const error = await response.json()
+        alert(`Failed to delete post: ${error.error || 'Unknown error'}`)
       }
     } catch (error) {
       console.error('Error deleting post:', error)
+      alert('Error deleting post. Please try again.')
     }
   }
 

@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/hooks/useAuth'
+import Link from 'next/link'
 import { 
   PencilIcon, 
   TrashIcon,
@@ -16,82 +18,33 @@ import { formatDate, formatRelativeTime } from '@/lib/utils'
 export default function UserList() {
   const [users, setUsers] = useState<FirestoreUser[]>([])
   const [loading, setLoading] = useState(true)
+  const { user: currentUser } = useAuth()
 
   useEffect(() => {
-    fetchUsers()
-  }, [])
+    if (currentUser) {
+      fetchUsers()
+    }
+  }, [currentUser])
 
   const fetchUsers = async () => {
+    if (!currentUser) return
+
     try {
-      const response = await fetch('/api/admin/users')
+      const token = await currentUser.getIdToken()
+      const response = await fetch('/api/admin/users', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
       if (response.ok) {
         const data = await response.json()
         setUsers(data.users || [])
       } else {
-        // Mock data for now
-        setUsers([
-          {
-            uid: 'user1',
-            email: 'admin@example.com',
-            displayName: 'John Doe',
-            avatar: 'https://ui-avatars.com/api/?name=John+Doe&background=3b82f6&color=fff',
-            role: 'admin',
-            permissions: ['posts.create', 'posts.edit', 'posts.delete', 'users.manage'],
-            active: true,
-            bio: 'Lead developer and content strategist',
-            expertise: ['React', 'TypeScript', 'Node.js'],
-            social: {
-              twitter: '@johndoe',
-              linkedin: 'johndoe',
-              github: 'johndoe',
-              website: 'https://johndoe.dev'
-            },
-            createdAt: new Date('2024-01-01'),
-            lastLogin: new Date('2024-01-22'),
-            joinDate: new Date('2024-01-01'),
-            postsCount: 15,
-            draftsCount: 3,
-            totalViews: 12547
-          },
-          {
-            uid: 'user2',
-            email: 'editor@example.com',
-            displayName: 'Jane Smith',
-            role: 'editor',
-            permissions: ['posts.create', 'posts.edit', 'posts.publish'],
-            active: true,
-            bio: 'Content editor and SEO specialist',
-            expertise: ['SEO', 'Content Writing', 'Analytics'],
-            social: {
-              linkedin: 'janesmith'
-            },
-            createdAt: new Date('2024-01-05'),
-            lastLogin: new Date('2024-01-21'),
-            joinDate: new Date('2024-01-05'),
-            postsCount: 8,
-            draftsCount: 2,
-            totalViews: 6234
-          },
-          {
-            uid: 'user3',
-            email: 'author@example.com',
-            displayName: 'Mike Johnson',
-            role: 'author',
-            permissions: ['posts.create', 'posts.edit.own'],
-            active: false,
-            bio: 'Technical writer and developer',
-            expertise: ['Python', 'Machine Learning', 'Data Science'],
-            social: {
-              github: 'mikejohnson'
-            },
-            createdAt: new Date('2024-01-10'),
-            lastLogin: new Date('2024-01-15'),
-            joinDate: new Date('2024-01-10'),
-            postsCount: 4,
-            draftsCount: 1,
-            totalViews: 2156
-          }
-        ])
+        const error = await response.json()
+        console.error('Failed to fetch users:', error.error || 'Unknown error')
+        setUsers([])
       }
     } catch (error) {
       console.error('Error fetching users:', error)
@@ -103,28 +56,42 @@ export default function UserList() {
 
   const handleDeleteUser = async (userId: string) => {
     if (!confirm('Are you sure you want to delete this user?')) return
+    if (!currentUser) return
 
     try {
+      const token = await currentUser.getIdToken()
       const response = await fetch(`/api/admin/users/${userId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       })
 
       if (response.ok) {
         setUsers(users.filter(user => user.uid !== userId))
+      } else {
+        const error = await response.json()
+        alert(`Failed to delete user: ${error.error || 'Unknown error'}`)
       }
     } catch (error) {
       console.error('Error deleting user:', error)
+      alert('Error deleting user. Please try again.')
     }
   }
 
   const handleToggleUserStatus = async (userId: string) => {
     const user = users.find(u => u.uid === userId)
-    if (!user) return
+    if (!user || !currentUser) return
 
     try {
+      const token = await currentUser.getIdToken()
       const response = await fetch(`/api/admin/users/${userId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ active: !user.active })
       })
 
@@ -134,9 +101,13 @@ export default function UserList() {
             ? { ...u, active: !u.active }
             : u
         ))
+      } else {
+        const error = await response.json()
+        alert(`Failed to update user status: ${error.error || 'Unknown error'}`)
       }
     } catch (error) {
       console.error('Error updating user status:', error)
+      alert('Error updating user status. Please try again.')
     }
   }
 
@@ -264,13 +235,13 @@ export default function UserList() {
       title: 'Actions',
       render: (_, user) => (
         <div className="flex space-x-2">
-          <button
-            onClick={() => {/* Navigate to edit user */}}
+          <Link
+            href={`/admin/users/${user.uid}/edit`}
             className="text-blue-600 hover:text-blue-900"
             title="Edit user"
           >
             <PencilIcon className="h-4 w-4" />
-          </button>
+          </Link>
           <button
             onClick={() => handleToggleUserStatus(user.uid)}
             className={user.active ? "text-yellow-600 hover:text-yellow-900" : "text-green-600 hover:text-green-900"}

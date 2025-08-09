@@ -1,12 +1,20 @@
 import Link from 'next/link'
-import { heroData, featuredStats } from '@/data'
-import { getFeaturedPosts, getLatestPosts, getAllCategories } from '@/lib/blog'
+import { getSiteContent } from '@/lib/site-content'
+import { getFeaturedPostsFromDB, getLatestPostsFromDB, getAllCategoriesFromDB } from '@/lib/blog-db'
 import { BlogGrid, CategoryGrid } from '@/components/blog'
 
-export default function Home() {
-  const featuredPosts = getFeaturedPosts().slice(0, 3)
-  const latestPosts = getLatestPosts(6)
-  const categories = getAllCategories().slice(0, 4)
+export default async function Home() {
+  // Fetch dynamic content from database
+  const [siteContent, featuredPosts, latestPosts, categories] = await Promise.all([
+    getSiteContent(),
+    getFeaturedPostsFromDB(),
+    getLatestPostsFromDB(6),
+    getAllCategoriesFromDB()
+  ])
+  
+  const { hero: heroData, stats: featuredStats } = siteContent
+  const displayedFeaturedPosts = featuredPosts.slice(0, 3)
+  const displayedCategories = categories.slice(0, 4)
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Hero Section */}
@@ -88,7 +96,7 @@ export default function Home() {
       </section>
 
       {/* Featured Posts */}
-      {featuredPosts.length > 0 && (
+      {displayedFeaturedPosts.length > 0 && (
         <section className="mb-12">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-3xl font-bold text-gray-900">Featured Posts</h2>
@@ -100,7 +108,7 @@ export default function Home() {
             </Link>
           </div>
           <BlogGrid 
-            posts={featuredPosts} 
+            posts={displayedFeaturedPosts} 
             columns={3}
             variant="featured"
           />
@@ -118,7 +126,7 @@ export default function Home() {
             View All →
           </Link>
         </div>
-        <CategoryGrid categories={categories} columns={4} />
+        <CategoryGrid categories={displayedCategories} columns={4} />
       </section>
 
       {/* Latest Posts */}

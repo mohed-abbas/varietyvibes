@@ -1,137 +1,51 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { 
   PencilIcon, 
   TrashIcon,
   FolderIcon,
   EyeIcon
 } from '@heroicons/react/24/outline'
+import { toast } from 'react-hot-toast'
 import DataTable, { Column } from '@/components/admin/common/DataTable'
 import StatusBadge from '@/components/admin/common/StatusBadge'
 import { FirestoreCategory } from '@/types/admin'
 import { formatDate, formatRelativeTime, getContrastColor } from '@/lib/utils'
+import { useAuth } from '@/hooks/useAuth'
 
 export default function CategoryList() {
   const [categories, setCategories] = useState<FirestoreCategory[]>([])
   const [loading, setLoading] = useState(true)
+  const { user: currentUser } = useAuth()
+  const router = useRouter()
 
   useEffect(() => {
-    fetchCategories()
-  }, [])
+    if (currentUser?.uid) {
+      fetchCategories()
+    }
+  }, [currentUser])
 
   const fetchCategories = async () => {
+    if (!currentUser?.uid) return
+
     try {
-      const response = await fetch('/api/admin/categories')
+      const token = await currentUser.getIdToken()
+      const response = await fetch('/api/admin/categories?limit=100', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
       if (response.ok) {
         const data = await response.json()
         setCategories(data.categories || [])
       } else {
-        // Mock data for now
-        setCategories([
-          {
-            id: 'tech',
-            slug: 'technology',
-            name: 'Technology',
-            description: 'Articles about web development, programming, and tech trends',
-            color: '#3b82f6',
-            icon: 'code',
-            featuredImage: '/images/categories/tech.jpg',
-            featured: true,
-            active: true,
-            sortOrder: 1,
-            seo: {
-              title: 'Technology Articles - Variety Vibes',
-              description: 'Latest articles on web development, programming, and technology trends',
-              keywords: ['technology', 'programming', 'web development', 'coding']
-            },
-            hero: {
-              title: 'Technology & Development',
-              subtitle: 'Stay updated with the latest in tech and development',
-              backgroundImage: '/images/categories/tech-hero.jpg'
-            },
-            createdAt: new Date('2024-01-01'),
-            updatedAt: new Date('2024-01-20'),
-            createdBy: 'user1',
-            postCount: 12,
-            totalViews: 8547
-          },
-          {
-            id: 'lifestyle',
-            slug: 'lifestyle',
-            name: 'Lifestyle',
-            description: 'Tips and insights for a better life, health, and wellness',
-            color: '#10b981',
-            icon: 'heart',
-            featured: true,
-            active: true,
-            sortOrder: 2,
-            seo: {
-              title: 'Lifestyle - Variety Vibes',
-              description: 'Tips and insights for better living, health, and wellness',
-              keywords: ['lifestyle', 'health', 'wellness', 'living']
-            },
-            hero: {
-              title: 'Lifestyle & Wellness',
-              subtitle: 'Discover tips for a healthier, happier life'
-            },
-            createdAt: new Date('2024-01-01'),
-            updatedAt: new Date('2024-01-15'),
-            createdBy: 'user1',
-            postCount: 8,
-            totalViews: 5234
-          },
-          {
-            id: 'business',
-            slug: 'business',
-            name: 'Business',
-            description: 'Entrepreneurship, startups, and business insights',
-            color: '#f59e0b',
-            icon: 'briefcase',
-            featured: false,
-            active: true,
-            sortOrder: 3,
-            seo: {
-              title: 'Business - Variety Vibes',
-              description: 'Entrepreneurship insights, startup tips, and business strategies',
-              keywords: ['business', 'entrepreneurship', 'startups', 'strategy']
-            },
-            hero: {
-              title: 'Business & Entrepreneurship',
-              subtitle: 'Insights for growing your business and career'
-            },
-            createdAt: new Date('2024-01-05'),
-            updatedAt: new Date('2024-01-10'),
-            createdBy: 'user2',
-            postCount: 5,
-            totalViews: 3156
-          },
-          {
-            id: 'travel',
-            slug: 'travel',
-            name: 'Travel',
-            description: 'Travel guides, tips, and destination insights',
-            color: '#8b5cf6',
-            icon: 'globe',
-            featured: false,
-            active: false,
-            sortOrder: 4,
-            seo: {
-              title: 'Travel - Variety Vibes',
-              description: 'Travel guides, destination tips, and adventure insights',
-              keywords: ['travel', 'destinations', 'guides', 'adventure']
-            },
-            hero: {
-              title: 'Travel & Adventure',
-              subtitle: 'Explore the world with our travel guides and tips'
-            },
-            createdAt: new Date('2024-01-08'),
-            updatedAt: new Date('2024-01-08'),
-            createdBy: 'user1',
-            postCount: 3,
-            totalViews: 1847
-          }
-        ])
+        console.error('Failed to fetch categories:', response.status)
+        const error = await response.json()
+        toast.error(error.error || 'Failed to load categories')
+        setCategories([])
       }
     } catch (error) {
       console.error('Error fetching categories:', error)
@@ -142,38 +56,64 @@ export default function CategoryList() {
   }
 
   const handleDeleteCategory = async (categoryId: string) => {
+    if (!currentUser?.uid) {
+      toast.error('Authentication required')
+      return
+    }
+
     const category = categories.find(c => c.id === categoryId)
     if (!category) return
 
     if (category.postCount > 0) {
-      alert(`Cannot delete category "${category.name}" because it has ${category.postCount} posts. Please move the posts to another category first.`)
+      toast.error(`Cannot delete category "${category.name}" because it has ${category.postCount} posts. Please move the posts to another category first.`)
       return
     }
 
     if (!confirm(`Are you sure you want to delete the category "${category.name}"?`)) return
 
     try {
+      const token = await currentUser.getIdToken()
       const response = await fetch(`/api/admin/categories/${categoryId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       })
 
       if (response.ok) {
         setCategories(categories.filter(cat => cat.id !== categoryId))
+        toast.success('Category deleted successfully')
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to delete category')
       }
     } catch (error) {
       console.error('Error deleting category:', error)
+      toast.error('Failed to delete category')
     }
   }
 
   const handleToggleCategoryStatus = async (categoryId: string) => {
+    if (!currentUser?.uid) {
+      toast.error('Authentication required')
+      return
+    }
+
     const category = categories.find(c => c.id === categoryId)
     if (!category) return
 
     try {
+      const token = await currentUser.getIdToken()
       const response = await fetch(`/api/admin/categories/${categoryId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: !category.active })
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          ...category,
+          active: !category.active 
+        })
       })
 
       if (response.ok) {
@@ -182,9 +122,14 @@ export default function CategoryList() {
             ? { ...c, active: !c.active }
             : c
         ))
+        toast.success(`Category ${!category.active ? 'activated' : 'deactivated'} successfully`)
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to update category status')
       }
     } catch (error) {
       console.error('Error updating category status:', error)
+      toast.error('Failed to update category status')
     }
   }
 
@@ -306,7 +251,7 @@ export default function CategoryList() {
       render: (_, category) => (
         <div className="flex space-x-2">
           <button
-            onClick={() => {/* Navigate to edit category */}}
+            onClick={() => router.push(`/admin/categories/${category.id}/edit`)}
             className="text-blue-600 hover:text-blue-900"
             title="Edit category"
           >

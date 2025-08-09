@@ -1,4 +1,4 @@
-import { getAllCategories } from '@/lib/blog'
+import { getAllCategoriesFromDB } from '@/lib/blog-db'
 import { generatePageMetadata } from '@/lib/metadata'
 import { CategoryGrid } from '@/components/blog'
 import Link from 'next/link'
@@ -9,8 +9,8 @@ export const metadata: Metadata = generatePageMetadata(
   'Explore all our content categories including insurance, home improvement, warranties, and more.'
 )
 
-export default function CategoriesPage() {
-  const categories = getAllCategories()
+export default async function CategoriesPage() {
+  const categories = await getAllCategoriesFromDB()
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

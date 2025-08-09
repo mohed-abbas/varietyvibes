@@ -31,8 +31,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [error, setError] = useState<string | null>(null)
 
   const getUserData = async (firebaseUser: User): Promise<AuthUser | null> => {
-    
-    console.log(getUserData, firebaseUser);
     try {
       const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
       
@@ -51,7 +49,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         avatar: firebaseUser.photoURL || userData.avatar,
         active: userData.active !== false,
         createdAt: userData.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-        lastLogin: new Date().toISOString()
+        lastLogin: new Date().toISOString(),
+        getIdToken: async () => {
+          const currentUser = auth.currentUser
+          if (!currentUser) throw new Error('No authenticated user')
+          return await currentUser.getIdToken()
+        }
       }
     } catch (error) {
       console.error('Error fetching user data:', error)

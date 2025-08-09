@@ -8,17 +8,17 @@ export function generateBlogPostMetadata(post: BlogPost): Metadata {
     openGraph: {
       title: post.title,
       description: post.description,
-      images: [post.image],
+      images: post.image ? [post.image] : [],
       type: 'article',
       publishedTime: post.date,
-      authors: [post.author],
+      authors: [post.author || 'Anonymous'],
       tags: post.tags,
     },
     twitter: {
       card: 'summary_large_image',
       title: post.title,
       description: post.description,
-      images: [post.image],
+      images: post.image ? [post.image] : [],
     },
   }
 }

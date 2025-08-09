@@ -1,6 +1,6 @@
 // Firebase client configuration
 import { initializeApp, FirebaseApp } from 'firebase/app'
-import { getAuth, Auth, connectAuthEmulator } from 'firebase/auth'
+import { getAuth, Auth, connectAuthEmulator, setPersistence, browserLocalPersistence } from 'firebase/auth'
 import { getFirestore, Firestore, connectFirestoreEmulator } from 'firebase/firestore'
 import { getStorage, FirebaseStorage, connectStorageEmulator } from 'firebase/storage'
 
@@ -25,6 +25,11 @@ if (typeof window !== 'undefined') {
   auth = getAuth(app)
   db = getFirestore(app)
   storage = getStorage(app)
+
+  // Set authentication persistence to local storage
+  setPersistence(auth, browserLocalPersistence).catch((error) => {
+    console.warn('Failed to set auth persistence:', error)
+  })
 
   // Connect to emulators in development (disabled for production Firebase)
   if (process.env.NODE_ENV === 'development' && process.env.USE_FIREBASE_EMULATOR === 'true') {

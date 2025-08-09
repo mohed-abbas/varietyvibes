@@ -1,4 +1,4 @@
-import { getPostBySlug, getAllPosts } from '@/lib/blog'
+import { getPostBySlugFromDB, getAllPostsFromDB } from '@/lib/blog-db'
 import { generateBlogPostMetadata } from '@/lib/metadata'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -14,7 +14,7 @@ interface BlogPostPageProps {
 
 // Generate static params for all blog posts
 export async function generateStaticParams() {
-  const posts = getAllPosts()
+  const posts = await getAllPostsFromDB()
   return posts.map((post) => ({
     slug: post.slug,
   }))
@@ -23,7 +23,7 @@ export async function generateStaticParams() {
 // Generate metadata for SEO
 export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
   const { slug } = await params
-  const post = getPostBySlug(slug)
+  const post = await getPostBySlugFromDB(slug)
   
   if (!post) {
     return {
@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
 
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const { slug } = await params
-  const post = getPostBySlug(slug)
+  const post = await getPostBySlugFromDB(slug)
 
   if (!post) {
     notFound()
@@ -82,10 +82,10 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
               <span className="text-primary-600 font-medium text-sm">
-                {post.author.charAt(0)}
+                {post.author ? post.author.charAt(0).toUpperCase() : 'A'}
               </span>
             </div>
-            <span className="font-medium text-gray-900">{post.author}</span>
+            <span className="font-medium text-gray-900">{post.author || 'Anonymous'}</span>
           </div>
           <span>•</span>
           <span>{formatDistanceToNow(new Date(post.date), { addSuffix: true })}</span>

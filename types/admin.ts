@@ -14,6 +14,7 @@ export interface AuthUser {
   active: boolean
   createdAt: string
   lastLogin: string
+  getIdToken: () => Promise<string>
 }
 
 export interface RolePermissions {

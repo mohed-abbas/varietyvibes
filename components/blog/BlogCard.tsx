@@ -89,7 +89,7 @@ export default function BlogCard({
           <div className="flex items-center gap-3">
             {showAuthor && (
               <span className="text-sm text-gray-600 font-medium">
-                {post.author}
+                {post.author || 'Anonymous'}
               </span>
             )}
             {showReadingTime && (

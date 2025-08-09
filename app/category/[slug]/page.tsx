@@ -1,4 +1,4 @@
-import { getPostsByCategory, getAllCategories, getCategoryBySlug } from '@/lib/blog'
+import { getPostsByCategoryFromDB, getAllCategoriesFromDB, getCategoryBySlugFromDB } from '@/lib/blog-db'
 import { generateCategoryMetadata } from '@/lib/metadata'
 import { BlogGrid } from '@/components/blog'
 import { notFound } from 'next/navigation'
@@ -13,7 +13,7 @@ interface CategoryPageProps {
 
 // Generate static params for all categories
 export async function generateStaticParams() {
-  const categories = getAllCategories()
+  const categories = await getAllCategoriesFromDB()
   return categories.map((category) => ({
     slug: category.slug,
   }))
@@ -22,7 +22,7 @@ export async function generateStaticParams() {
 // Generate metadata for SEO
 export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
   const { slug } = await params
-  const category = getCategoryBySlug(slug)
+  const category = await getCategoryBySlugFromDB(slug)
   
   if (!category) {
     return {
@@ -35,8 +35,10 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
 
 export default async function CategoryPage({ params }: CategoryPageProps) {
   const { slug } = await params
-  const posts = getPostsByCategory(slug)
-  const category = getCategoryBySlug(slug)
+  const [posts, category] = await Promise.all([
+    getPostsByCategoryFromDB(slug),
+    getCategoryBySlugFromDB(slug)
+  ])
 
   if (!category) {
     notFound()
